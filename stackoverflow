@@ -109,12 +109,3 @@ RETURN u.display_name as user,COUNT(a) AS answers, max(a.score) as max_score
 ORDER BY max_score DESC LIMIT 10;
 ----
 
-What's the shortest path between users?
-
-[source,cypher]
-----
-MATCH path = allShortestPaths(
-  (u1:User {display_name:"alexanoid"})-[*]-(u2:User {display_name:"InverseFalcon"})
-)
-RETURN path LIMIT 1;
-----
