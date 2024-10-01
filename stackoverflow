@@ -34,3 +34,87 @@ FOREACH (a IN q.answers |
    MERGE (answer)&lt;-[:PROVIDED]-(answerer)
 )
 
+// who commented on the question
+FOREACH (c in q.comments |
+  MERGE (question)<-[:COMMENTED_ON]-(comment:Comment {uuid:c.comment_id})
+    ON CREATE SET comment.link=c.link, comment.score=c.score
+  MERGE (commenter:User {uuid:coalesce(c.owner.user_id,'deleted')}) 
+    ON CREATE SET commenter.display_name = c.owner.display_name
+  MERGE (comment)<-[:COMMENTED]-(commenter)
+);
+----
+
+== Basic Queries
+
+Labels in the graph and counts for each:
+
+[source,cypher]
+----
+MATCH (n)
+RETURN labels(n) as label, count(*) as freq
+ORDER BY freq DESC;
+----
+
+Relationship-types in the graph and counts for eachabel:
+
+[source,cypher]
+----
+MATCH ()-[r]->()
+RETURN type(r) as type, count(*) as freq
+ORDER BY freq DESC;
+----
+
+== Top Tags
+
+Which are the most popular tags?
+
+[source,cypher]
+----
+MATCH (q:Question)-[:TAGGED]->(t:Tag)
+RETURN t.name,  count(q) AS questions
+ORDER BY questions DESC
+LIMIT 5;
+----
+
+== Exploring Users
+
+Who are the top users asking questions?
+
+[source,cypher]
+----
+MATCH (u:User)-[:ASKED]->(q:Question)
+RETURN u.display_name, count(*) AS questions
+ORDER by questions DESC 
+LIMIT 10;
+----
+
+Who's answering? 
+
+Ordered by number of answers 
+
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->(q:Question)
+RETURN u.display_name as user,COUNT(a) AS answers, avg(a.score) as avg_score
+ORDER BY answers DESC LIMIT 10;
+----
+
+Ordered by max score, filtered for a particular tag
+
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->
+      (q:Question)-[:TAGGED]->(:Tag {name:"cypher"})
+RETURN u.display_name as user,COUNT(a) AS answers, max(a.score) as max_score
+ORDER BY max_score DESC LIMIT 10;
+----
+
+What's the shortest path between users?
+
+[source,cypher]
+----
+MATCH path = allShortestPaths(
+  (u1:User {display_name:"alexanoid"})-[*]-(u2:User {display_name:"InverseFalcon"})
+)
+RETURN path LIMIT 1;
+----
