@@ -88,16 +88,7 @@ ORDER by questions DESC
 LIMIT 10;
 ----
 
-Who's answering? 
 
-Ordered by number of answers 
-
-[source,cypher]
-----
-MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->(q:Question)
-RETURN u.display_name as user,COUNT(a) AS answers, avg(a.score) as avg_score
-ORDER BY answers DESC LIMIT 10;
-----
 
 
 
