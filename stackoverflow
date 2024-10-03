@@ -99,13 +99,5 @@ RETURN u.display_name as user,COUNT(a) AS answers, avg(a.score) as avg_score
 ORDER BY answers DESC LIMIT 10;
 ----
 
-Ordered by max score, filtered for a particular tag
 
-[source,cypher]
-----
-MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->
-      (q:Question)-[:TAGGED]->(:Tag {name:"cypher"})
-RETURN u.display_name as user,COUNT(a) AS answers, max(a.score) as max_score
-ORDER BY max_score DESC LIMIT 10;
-----
 
