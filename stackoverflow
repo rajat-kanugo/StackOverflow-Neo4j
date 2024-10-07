@@ -88,6 +88,114 @@ ORDER by questions DESC
 LIMIT 10;
 ----
 
+Who's answering? 
+
+Ordered by number of answers 
+
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->(q:Question)
+RETURN u.display_name as user,COUNT(a) AS answers, avg(a.score) as avg_score
+ORDER BY answers DESC LIMIT 10;
+----
+
+Ordered by max score, filtered for a particular tag
+
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->
+      (q:Question)-[:TAGGED]->(:Tag {name:"cypher"})
+RETURN u.display_name as user,COUNT(a) AS answers, max(a.score) as max_score
+ORDER BY max_score DESC LIMIT 10;
+----
+
+What's the shortest path between users?
+
+[source,cypher]
+----
+MATCH path = allShortestPaths(
+  (u1:User {display_name:"alexanoid"})-[*]-(u2:User {display_name:"InverseFalcon"})
+)
+RETURN path LIMIT 1;
+----
+
+== User Engagement
+
+User engagement over time:
+
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->()-[:ANSWERED]->
+      (q:Question)-[:TAGGED]->(t:Tag)
+WHERE u.display_name = "InverseFalcon"
+RETURN apoc.date.format(q.creation_date,'s','yyyy-MM') as month, 
+       count(distinct q) as count, collect(distinct t.name) as tags
+ORDER BY month asc
+----
+
+== Unanswered Questions
+
+What are the tags for unanswered questions?
+
+[source,cypher]
+----
+MATCH (q:Question)-[:TAGGED]->(t:Tag)
+WHERE NOT t.name IN ['neo4j','cypher'] 
+  AND NOT (q)<-[:ANSWERED]-()
+RETURN t.name as tag, count(q) AS questions
+ORDER BY questions DESC LIMIT 10;
+----
+
+== How are tags related to other tags?
+
+Tag correlations:
+
+[source,cypher]
+----
+MATCH (t1:Tag)<-[:TAGGED]-()-[:TAGGED]->(t2:Tag)
+WHERE id(t1) < id(t2) and t1.name <> 'neo4j' and t2.name <> 'neo4j'
+RETURN t1.name, t2.name,count(*) as freq
+ORDER BY freq desc LIMIT 10;
+----
+
+== Virtual Graphs: Tags
+
+Project tags via co-occurrence with virtual relationships.
+
+[source,cypher]
+----
+MATCH (t1:Tag)<-[:TAGGED]-()-[:TAGGED]->(t2:Tag)
+WHERE id(t1) < id(t2) and t1.name <> 'neo4j' and t2.name <> 'neo4j'
+WITH t1, t2,count(*) as freq  where freq > 3
+RETURN t1,t2, apoc.create.vRelationship(t1,'OCCURRED',{freq:freq},t2) as rel
+----
+
+If you want to you can also materialize those relationships in the graph and then explore the data in Browser or Bloom visually forming clusters.
+
+[source,cypher]
+----
+MATCH (t1:Tag)<-[:TAGGED]-()-[:TAGGED]->(t2:Tag)
+WHERE id(t1) < id(t2) and t1.name <> 'neo4j' and t2.name <> 'neo4j'
+WITH t1, t2,count(*) as freq  where freq > 3
+MERGE (t1)-[r:OCCURRED]-(t2) SET r.freq=freq
+RETURN count(*)
+----
+
+== Virtual Graphs: Social Network
+
+We can do something similar for commenters - what users keep on running into each other in the comments? 
+
+[source,cypher]
+----
+MATCH p1=(u1:User)-[:COMMENTED]->(c1:Comment)-[:COMMENTED_ON]-(q:Question)
+MATCH p2=(u2:User)-[:COMMENTED]->(c2:Comment)-[:COMMENTED_ON]-(q)
+WHERE id(u1) < id(u2)
+WITH u1, u2, count(distinct q) as freq
+WHERE freq > 2
+RETURN u1, u2, apoc.create.vRelationship(u1,'OCCURRED',{freq:freq},u2) as rel
+----
+
+
 
 
 
