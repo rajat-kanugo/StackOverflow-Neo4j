@@ -1,44 +1,53 @@
+== Social Network Analysis
+The following query uses the `ASKED` relationship to find `User` and `Question` nodes.
+
+.Match User and Question nodes
+[source,cypher]
+----
+MATCH (u:User)-[a:ASKED]->(q:Question)
+RETURN u, a, q
+
 // create the questions
-MERGE (question:Question {uuid:q.question_id})
+MERGE (question:Question {uuid: q.question_id})
   ON CREATE SET question.title = q.title,
   	question.link = q.share_link,
   	question.creation_date = q.creation_date,
-  	question.accepted_answer_id=q.accepted_answer_id,
-  	question.view_count=q.view_count,
-   	question.answer_count=q.answer_count,
-   	question.body_markdown=q.body_markdown
+  	question.accepted_answer_id = q.accepted_answer_id,
+  	question.view_count = q.view_count,
+   	question.answer_count = q.answer_count,
+   	question.body_markdown = q.body_markdown
 
 // who asked the question
-MERGE (owner:User {uuid:coalesce(q.owner.user_id,'deleted')})
+MERGE (owner:User {uuid: coalesce(q.owner.user_id, 'deleted')})
   ON CREATE SET owner.display_name = q.owner.display_name
-MERGE (owner)-[:ASKED]-&gt;(question)
+MERGE (owner)-[:ASKED]->(question)
 
 // what tags do the questions have
 FOREACH (tagName IN q.tags |
-  MERGE (tag:Tag {name:tagName})
+  MERGE (tag:Tag {name: tagName})
     ON CREATE SET tag.link = "https://stackoverflow.com/questions/tagged/" + tag.name
-  MERGE (question)-[:TAGGED]-&gt;(tag))
+  MERGE (question)-[:TAGGED]->(tag))
 
 // who answered the questions?
 FOREACH (a IN q.answers |
-   MERGE (question)&lt;-[:ANSWERED]-(answer:Answer {uuid:a.answer_id})
+   MERGE (question)<-[:ANSWERED]-(answer:Answer {uuid: a.answer_id})
     ON CREATE SET answer.is_accepted = a.is_accepted,
-    answer.link=a.share_link,
-    answer.title=a.title,
-    answer.body_markdown=a.body_markdown,
-    answer.score=a.score,
-   	answer.favorite_score=a.favorite_score,
-   	answer.view_count=a.view_count
-   MERGE (answerer:User {uuid:coalesce(a.owner.user_id,'deleted')})
+    answer.link = a.share_link,
+    answer.title = a.title,
+    answer.body_markdown = a.body_markdown,
+    answer.score = a.score,
+    answer.favorite_score = a.favorite_score,
+    answer.view_count = a.view_count
+   MERGE (answerer:User {uuid: coalesce(a.owner.user_id, 'deleted')})
     ON CREATE SET answerer.display_name = a.owner.display_name
-   MERGE (answer)&lt;-[:PROVIDED]-(answerer)
+   MERGE (answer)<-[:PROVIDED]-(answerer)
 )
 
 // who commented on the question
-FOREACH (c in q.comments |
-  MERGE (question)<-[:COMMENTED_ON]-(comment:Comment {uuid:c.comment_id})
-    ON CREATE SET comment.link=c.link, comment.score=c.score
-  MERGE (commenter:User {uuid:coalesce(c.owner.user_id,'deleted')}) 
+FOREACH (c IN q.comments |
+  MERGE (question)<-[:COMMENTED_ON]-(comment:Comment {uuid: c.comment_id})
+    ON CREATE SET comment.link = c.link, comment.score = c.score
+  MERGE (commenter:User {uuid: coalesce(c.owner.user_id, 'deleted')})
     ON CREATE SET commenter.display_name = c.owner.display_name
   MERGE (comment)<-[:COMMENTED]-(commenter)
 );
@@ -46,159 +55,214 @@ FOREACH (c in q.comments |
 
 == Basic Queries
 
-Labels in the graph and counts for each:
-
+.Labels in the graph and counts for each:
 [source,cypher]
 ----
 MATCH (n)
-RETURN labels(n) as label, count(*) as freq
+RETURN labels(n) AS label, count(*) AS freq
 ORDER BY freq DESC;
 ----
 
-Relationship-types in the graph and counts for eachabel:
-
+.Relationship-types in the graph and counts for each label:
 [source,cypher]
 ----
 MATCH ()-[r]->()
-RETURN type(r) as type, count(*) as freq
+RETURN type(r) AS type, count(*) AS freq
 ORDER BY freq DESC;
 ----
 
+.Reveal the solution
+==== 
+[source,cypher]
+----
+MATCH (u:User)-[p:PROVIDED]->(a:Answer)
+RETURN u, p, a
+----
+
+.Users with the highest average score
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)
+RETURN u.display_name, COUNT(a) AS answers, avg(a.score) AS avg_score
+ORDER BY avg_score DESC 
+LIMIT 10
+----
+
+.Users with the highest maximum score
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)
+RETURN u.display_name, COUNT(a) AS answers, max(a.score) AS max_score
+ORDER BY max_score DESC 
+LIMIT 10
+----
+
+.Comments made by "cybersam" on questions tagged with "neo4j"
+[source,cypher]
+----
+MATCH (u:User)-[ct:COMMENTED]->(c:Comment)-[co:COMMENTED_ON]->(q:Question)-[tg:TAGGED]->(t:Tag)
+WHERE u.display_name = "cybersam" AND t.name = "neo4j"
+RETURN u, ct, c, co, q, tg, t
+----
+====
+
 == Top Tags
 
-Which are the most popular tags?
-
+.Which are the most popular tags?
 [source,cypher]
 ----
 MATCH (q:Question)-[:TAGGED]->(t:Tag)
-RETURN t.name,  count(q) AS questions
+RETURN t.name, count(q) AS questions
 ORDER BY questions DESC
 LIMIT 5;
 ----
 
 == Exploring Users
 
-Who are the top users asking questions?
-
+How many questions did users ask?
 [source,cypher]
 ----
 MATCH (u:User)-[:ASKED]->(q:Question)
 RETURN u.display_name, count(*) AS questions
-ORDER by questions DESC 
+----
+
+Who are the top users asking questions?
+[source,cypher]
+----
+MATCH (u:User)-[:ASKED]->(q:Question)
+RETURN u.display_name, count(*) AS questions
+ORDER BY questions DESC 
 LIMIT 10;
 ----
 
-Who's answering? 
+.How many answers did users provide?
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)
+RETURN u.display_name, COUNT(a) AS answers
+ORDER BY answers DESC 
+LIMIT 10
+----
 
+.Users score answers on Stack Overflow. 
+You can find each user's average score using the `avg` function.
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->(a:Answer)
+RETURN u.display_name, COUNT(a) AS answers, avg(a.score) AS avg_score
+ORDER BY answers DESC 
+LIMIT 10
+----
+
+.Who's answering? 
 Ordered by number of answers 
-
 [source,cypher]
 ----
 MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->(q:Question)
-RETURN u.display_name as user,COUNT(a) AS answers, avg(a.score) as avg_score
-ORDER BY answers DESC LIMIT 10;
+RETURN u.display_name AS user, COUNT(a) AS answers, avg(a.score) AS avg_score
+ORDER BY answers DESC 
+LIMIT 10;
 ----
 
-Ordered by max score, filtered for a particular tag
-
+.Ordered by max score, filtered for a particular tag
 [source,cypher]
 ----
-MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->
-      (q:Question)-[:TAGGED]->(:Tag {name:"cypher"})
-RETURN u.display_name as user,COUNT(a) AS answers, max(a.score) as max_score
-ORDER BY max_score DESC LIMIT 10;
+MATCH (u:User)-[:PROVIDED]->(a:Answer)-[:ANSWERED]->(q:Question)-[:TAGGED]->(:Tag {name: "cypher"})
+RETURN u.display_name AS user, COUNT(a) AS answers, max(a.score) AS max_score
+ORDER BY max_score DESC 
+LIMIT 10;
 ----
 
-What's the shortest path between users?
-
+.What's the shortest path between users?
 [source,cypher]
 ----
 MATCH path = allShortestPaths(
-  (u1:User {display_name:"alexanoid"})-[*]-(u2:User {display_name:"InverseFalcon"})
+  (u1:User {display_name: "alexanoid"})-[*]-(u2:User {display_name: "InverseFalcon"})
 )
 RETURN path LIMIT 1;
 ----
 
 == User Engagement
 
-User engagement over time:
-
+.User engagement over time:
 [source,cypher]
 ----
-MATCH (u:User)-[:PROVIDED]->()-[:ANSWERED]->
-      (q:Question)-[:TAGGED]->(t:Tag)
+MATCH (u:User)-[:PROVIDED]->()-[:ANSWERED]->(q:Question)-[:TAGGED]->(t:Tag)
 WHERE u.display_name = "InverseFalcon"
-RETURN apoc.date.format(q.creation_date,'s','yyyy-MM') as month, 
-       count(distinct q) as count, collect(distinct t.name) as tags
-ORDER BY month asc
+RETURN apoc.date.format(q.creation_date, 's', 'yyyy-MM') AS month, 
+       count(distinct q) AS count, collect(distinct t.name) AS tags
+ORDER BY month ASC
+----
+
+.You can aggregate the number of questions answered by month.
+[source,cypher]
+----
+MATCH (u:User)-[:PROVIDED]->()-[:ANSWERED]->(q:Question)-[:TAGGED]->(t:Tag)
+WHERE u.display_name = "cybersam"
+RETURN apoc.date.format(q.creation_date, 's', 'yyyy-MM') AS month, 
+       count(distinct q) AS count, collect(distinct t.name) AS tags
+ORDER BY month ASC
+----
+
+== Shortest paths
+
+.You can use shortest path functions to find the shortest path between users.
+[source,cypher]
+----
+MATCH path = shortestPath(
+  (u1:User {display_name: "A. L"})-[*]-(u2:User {display_name: "cybersam"})
+)
+RETURN path;
+----
+
+.The query returns the first shortest path it finds. 
+[source,cypher]
+----
+MATCH path = allShortestPaths(
+  (u1:User {display_name: "A. L"})-[*]-(u2:User {display_name: "cybersam"})
+)
+RETURN path;
 ----
 
 == Unanswered Questions
 
-What are the tags for unanswered questions?
-
+.What are the tags for unanswered questions?
 [source,cypher]
 ----
 MATCH (q:Question)-[:TAGGED]->(t:Tag)
-WHERE NOT t.name IN ['neo4j','cypher'] 
+WHERE NOT t.name IN ['neo4j', 'cypher'] 
   AND NOT (q)<-[:ANSWERED]-()
-RETURN t.name as tag, count(q) AS questions
-ORDER BY questions DESC LIMIT 10;
+RETURN t.name AS tag, count(q) AS questions
+ORDER BY questions DESC 
+LIMIT 10;
+----
+
+.You can use the `NOT` keyword to negate a pattern.
+[source,cypher]
+----
+MATCH (q:Question)
+WHERE NOT (q)<-[:ANSWERED]-()
+RETURN q
 ----
 
 == How are tags related to other tags?
 
-Tag correlations:
-
+.Tag correlations:
 [source,cypher]
 ----
 MATCH (t1:Tag)<-[:TAGGED]-()-[:TAGGED]->(t2:Tag)
-WHERE id(t1) < id(t2) and t1.name <> 'neo4j' and t2.name <> 'neo4j'
-RETURN t1.name, t2.name,count(*) as freq
-ORDER BY freq desc LIMIT 10;
+WHERE id(t1) < id(t2) AND t1.name <> 'neo4j' AND t2.name <> 'neo4j'
+RETURN t1.name, t2.name, count(*) AS freq
+ORDER BY freq DESC 
+LIMIT 10;
 ----
 
 == Virtual Graphs: Tags
 
-Project tags via co-occurrence with virtual relationships.
-
+.Project tags via co-occurrence with virtual relationships.
 [source,cypher]
 ----
 MATCH (t1:Tag)<-[:TAGGED]-()-[:TAGGED]->(t2:Tag)
-WHERE id(t1) < id(t2) and t1.name <> 'neo4j' and t2.name <> 'neo4j'
-WITH t1, t2,count(*) as freq  where freq > 3
-RETURN t1,t2, apoc.create.vRelationship(t1,'OCCURRED',{freq:freq},t2) as rel
-----
-
-If you want to you can also materialize those relationships in the graph and then explore the data in Browser or Bloom visually forming clusters.
-
-[source,cypher]
-----
-MATCH (t1:Tag)<-[:TAGGED]-()-[:TAGGED]->(t2:Tag)
-WHERE id(t1) < id(t2) and t1.name <> 'neo4j' and t2.name <> 'neo4j'
-WITH t1, t2,count(*) as freq  where freq > 3
-MERGE (t1)-[r:OCCURRED]-(t2) SET r.freq=freq
-RETURN count(*)
-----
-
-== Virtual Graphs: Social Network
-
-We can do something similar for commenters - what users keep on running into each other in the comments? 
-
-[source,cypher]
-----
-MATCH p1=(u1:User)-[:COMMENTED]->(c1:Comment)-[:COMMENTED_ON]-(q:Question)
-MATCH p2=(u2:User)-[:COMMENTED]->(c2:Comment)-[:COMMENTED_ON]-(q)
-WHERE id(u1) < id(u2)
-WITH u1, u2, count(distinct q) as freq
-WHERE freq > 2
-RETURN u1, u2, apoc.create.vRelationship(u1,'OCCURRED',{freq:freq},u2) as rel
-----
-
-
-
-
-
-
-
-
+WHERE id(t1) < id(t2) AND t1.name <> 'neo4j' AND t2.name <> 'neo4j'
+WITH t1, t2, count(*) AS freq WHERE freq > 3
+RETURN t1, t2, apoc.create.vRelationship(t1, 'OCCURRED', {freq: freq}, t
